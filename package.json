@@ -1,7 +1,7 @@
 {
   "name": "continues-cli",
   "version": "1.0.0",
-  "description": "Agent session resume broker — resume Claude/Codex/Cursor sessions with context",
+  "description": "Resume or transfer local Claude Code and Codex sessions",
   "type": "module",
   "bin": {
     "bridge": "./continues.mjs",
@@ -9,16 +9,40 @@
   },
   "scripts": {
     "start": "node continues.mjs",
-    "list": "node continues.mjs list"
+    "list": "node continues.mjs list",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "test": "node --test",
+    "check": "npm run lint && npm test"
   },
   "keywords": [
     "claude",
     "codex",
-    "cursor",
     "session",
     "resume",
     "context"
   ],
   "author": "danishaft",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "continues.mjs",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danishaft/resume-cli-.git"
+  },
+  "bugs": {
+    "url": "https://github.com/danishaft/resume-cli-/issues"
+  },
+  "homepage": "https://github.com/danishaft/resume-cli-#readme",
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0"
+  }
 }
