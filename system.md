@@ -23,21 +23,27 @@ handoff files for cross-agent transfers, and starts an installed target CLI.
 
 ```mermaid
 flowchart LR
-    Entry[continues.mjs<br/>orchestration] --> Args[src/args.mjs<br/>validation]
-    Entry --> Terminal[src/terminal.mjs<br/>selection]
-    Entry --> Sessions[src/sessions.mjs<br/>discovery and parsing]
-    Entry --> Handoff[src/handoff.mjs<br/>state extraction]
-    Entry --> Launch[src/launch.mjs<br/>command construction]
+    Entry[continues.ts<br/>orchestration] --> Args[src/args.ts<br/>validation]
+    Entry --> Terminal[src/terminal.ts<br/>selection]
+    Entry --> Sessions[src/sessions.ts<br/>discovery and parsing]
+    Entry --> Handoff[src/handoff.ts<br/>state extraction]
+    Entry --> Launch[src/launch.ts<br/>command construction]
+    Types[src/types.ts<br/>shared contracts] --> Entry
+    Types --> Args
+    Types --> Sessions
+    Types --> Handoff
+    Types --> Launch
     Sessions --> Stores[(Claude and Codex JSONL)]
     Handoff --> Stores
     Handoff --> Files[(Private handoff files)]
     Launch --> Agents[Claude or Codex process]
 ```
 
-`continues.mjs` owns the workflow but not implementation details. Argument
-validation returns explicit command shapes. Session parsing converts each
-source format into a common conversation shape. Launch code is the only module
-that knows native CLI syntax.
+`continues.ts` owns the workflow but not implementation details. Argument
+validation returns a discriminated command union. Session parsing converts each
+source format into a common typed conversation shape. Launch code is the only
+module that knows native CLI syntax. TypeScript compiles these modules into
+`dist/` for Node.js execution and npm packaging.
 
 ## Same-agent resume
 
@@ -118,7 +124,8 @@ machines with only one agent installed.
 
 ## Verification boundary
 
-Automated tests protect parsing options and native command construction. A
-functional smoke check lists a real local session and inspects the exact dry-run
-launch. Live cross-agent behavior still depends on installed third-party CLIs
-and their session formats.
+The strict TypeScript build protects module contracts, while automated tests
+protect parsing options and native command construction. A functional smoke
+check lists a real local session and inspects the exact dry-run launch. Live
+cross-agent behavior still depends on installed third-party CLIs and their
+session formats.

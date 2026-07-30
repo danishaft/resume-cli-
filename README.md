@@ -7,6 +7,9 @@ continue the work in the other CLI.
 resume delegates to that agent's native resume command. A cross-agent transfer
 builds a compact handoff and starts a new session in the target CLI.
 
+The runtime is written in strict TypeScript and compiled to standard Node.js
+ES modules before packaging.
+
 ## Requirements
 
 - Node.js 22 or newer
@@ -108,12 +111,14 @@ Review sensitive sessions before transferring them between tools.
 
 ```bash
 npm install
+npm run build
 npm run check
 npm pack --dry-run
 ```
 
-The focused tests protect argument validation and the native Claude/Codex resume
-command contracts. A local Codex session dry run is the functional smoke check.
+`npm run check` runs Biome, the strict TypeScript build, and the focused
+argument and native-command contract tests. Listing a real local session and
+inspecting its dry-run launch are the functional smoke checks.
 
 ## Limitations
 
