@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildResumeCommand } from "../src/launch.mjs";
+import { buildResumeCommand } from "../dist/src/launch.js";
 
 test("Codex sessions use the current native resume command", () => {
 	assert.deepEqual(buildResumeCommand({ source: "codex", id: "session-1" }), {

@@ -1,14 +1,15 @@
-import readline from "node:readline";
+import readline, { type Key } from "node:readline";
 
-import { formatTimestamp } from "./sessions.mjs";
+import { formatTimestamp } from "./sessions.js";
+import type { Session } from "./types.js";
 
-export async function ask(question) {
+export async function ask(question: string): Promise<string> {
 	const reader = readline.createInterface({
 		input: process.stdin,
 		output: process.stdout,
 	});
 	try {
-		return await new Promise((resolve) => {
+		return await new Promise<string>((resolve) => {
 			reader.question(question, (answer) => resolve(answer.trim()));
 		});
 	} finally {
@@ -16,7 +17,7 @@ export async function ask(question) {
 	}
 }
 
-function truncateMiddle(value, maxLength) {
+function truncateMiddle(value: string, maxLength: number): string {
 	if (value.length <= maxLength) {
 		return value;
 	}
@@ -24,21 +25,28 @@ function truncateMiddle(value, maxLength) {
 	return `${value.slice(0, sideLength)}...${value.slice(-sideLength)}`;
 }
 
-function renderMenu(title, lines, selected, offset, windowSize) {
+function renderMenu(
+	title: string,
+	lines: string[],
+	selected: number,
+	offset: number,
+	windowSize: number,
+): void {
 	const output = ["\x1b[2J\x1b[H", title, ""];
 	for (let index = offset; index < offset + windowSize; index += 1) {
-		if (!lines[index]) {
+		const line = lines[index];
+		if (!line) {
 			break;
 		}
 		const prefix = index === selected ? "> " : "  ";
 		const width = Math.max(60, (process.stdout.columns ?? 100) - 6);
-		output.push(`${prefix}${truncateMiddle(lines[index], width)}`);
+		output.push(`${prefix}${truncateMiddle(line, width)}`);
 	}
 	output.push("", "Use arrows or j/k, Enter to select, q to cancel");
 	process.stdout.write(output.join("\n"));
 }
 
-async function selectWithTty(lines, title) {
+async function selectWithTty(lines: string[], title: string): Promise<number> {
 	readline.emitKeypressEvents(process.stdin);
 	let selected = 0;
 	let offset = 0;
@@ -47,25 +55,25 @@ async function selectWithTty(lines, title) {
 		Math.min(lines.length, (process.stdout.rows ?? 24) - 6),
 	);
 
-	const restore = () => {
+	const restore = (): void => {
 		if (process.stdin.isTTY) {
 			process.stdin.setRawMode(false);
 		}
 		process.stdout.write("\x1b[?25h\n");
 	};
 
-	return new Promise((resolve, reject) => {
-		const onSignal = () => {
-			cleanup();
-			reject(new Error("Selection cancelled"));
-		};
-		const cleanup = () => {
+	return new Promise<number>((resolve, reject) => {
+		const cleanup = (): void => {
 			process.stdin.off("keypress", onKeypress);
 			process.off("SIGINT", onSignal);
 			process.off("SIGTERM", onSignal);
 			restore();
 		};
-		const refresh = () => {
+		const onSignal = (): void => {
+			cleanup();
+			reject(new Error("Selection cancelled"));
+		};
+		const refresh = (): void => {
 			if (selected < offset) {
 				offset = selected;
 			}
@@ -74,7 +82,7 @@ async function selectWithTty(lines, title) {
 			}
 			renderMenu(title, lines, selected, offset, windowSize);
 		};
-		const onKeypress = (_input, key = {}) => {
+		const onKeypress = (_input: string, key: Key = {}): void => {
 			if (
 				key.name === "q" ||
 				key.name === "escape" ||
@@ -104,7 +112,10 @@ async function selectWithTty(lines, title) {
 	});
 }
 
-async function selectWithPrompt(lines, title) {
+async function selectWithPrompt(
+	lines: string[],
+	title: string,
+): Promise<number> {
 	process.stdout.write(`${title}\n`);
 	for (const [index, line] of lines.entries()) {
 		process.stdout.write(`${String(index + 1).padStart(2, " ")}. ${line}\n`);
@@ -116,7 +127,10 @@ async function selectWithPrompt(lines, title) {
 	return answer - 1;
 }
 
-export async function selectOption(options, title) {
+export async function selectOption(
+	options: string[],
+	title: string,
+): Promise<string> {
 	if (options.length === 0) {
 		throw new Error(`No options available for ${title}`);
 	}
@@ -124,10 +138,14 @@ export async function selectOption(options, title) {
 		process.stdin.isTTY && process.stdout.isTTY
 			? await selectWithTty(options, title)
 			: await selectWithPrompt(options, title);
-	return options[index];
+	const selected = options[index];
+	if (selected === undefined) {
+		throw new Error(`No option selected for ${title}`);
+	}
+	return selected;
 }
 
-export async function selectSession(sessions) {
+export async function selectSession(sessions: Session[]): Promise<Session> {
 	const lines = sessions.map((session) => {
 		const summary = session.summary ? ` - ${session.summary}` : "";
 		return `${formatTimestamp(session.modifiedAt)} [${session.source}] [${session.project}] ${session.id}${summary}`;
@@ -136,5 +154,9 @@ export async function selectSession(sessions) {
 		process.stdin.isTTY && process.stdout.isTTY
 			? await selectWithTty(lines, "Recent sessions")
 			: await selectWithPrompt(lines, "Recent sessions");
-	return sessions[index];
+	const selected = sessions[index];
+	if (!selected) {
+		throw new Error("No session selected");
+	}
+	return selected;
 }

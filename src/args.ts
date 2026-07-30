@@ -1,11 +1,20 @@
-export const DEFAULT_CONTEXT_LEVEL = "standard";
+import type {
+	CliCommand,
+	ContextLevel,
+	ListCommand,
+	NewCommand,
+	Platform,
+	ResumeCommand,
+} from "./types.js";
+
+export const DEFAULT_CONTEXT_LEVEL: ContextLevel = "standard";
 export const DEFAULT_MAX_MESSAGES = 12;
 export const DEFAULT_RECENT_LIMIT = 20;
 
-const CONTEXT_LEVELS = new Set(["minimal", "standard", "deep"]);
-const PLATFORMS = new Set(["claude", "codex"]);
+const CONTEXT_LEVELS = new Set<ContextLevel>(["minimal", "standard", "deep"]);
+const PLATFORMS = new Set<Platform>(["claude", "codex"]);
 
-function readValue(args, index, option) {
+function readValue(args: string[], index: number, option: string): string {
 	const value = args[index + 1];
 	if (!value || value.startsWith("--")) {
 		throw new Error(`${option} requires a value`);
@@ -13,7 +22,7 @@ function readValue(args, index, option) {
 	return value;
 }
 
-function parsePositiveInteger(value, option) {
+function parsePositiveInteger(value: string, option: string): number {
 	const parsed = Number(value);
 	if (!Number.isInteger(parsed) || parsed < 1) {
 		throw new Error(`${option} must be a positive integer`);
@@ -21,46 +30,48 @@ function parsePositiveInteger(value, option) {
 	return parsed;
 }
 
-function parsePlatform(value, option) {
+function isPlatform(value: string): value is Platform {
+	return PLATFORMS.has(value as Platform);
+}
+
+function parsePlatform(value: string | undefined, option: string): Platform {
 	const normalized = String(value).toLowerCase();
-	if (!PLATFORMS.has(normalized)) {
+	if (!isPlatform(normalized)) {
 		throw new Error(`${option} must be claude or codex`);
 	}
 	return normalized;
 }
 
-function parseList(args) {
-	const result = {
-		command: "list",
-		source: null,
-		limit: DEFAULT_RECENT_LIMIT,
-	};
+function isContextLevel(value: string): value is ContextLevel {
+	return CONTEXT_LEVELS.has(value as ContextLevel);
+}
+
+function parseList(args: string[]): ListCommand {
+	let source: Platform | null = null;
+	let limit = DEFAULT_RECENT_LIMIT;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const option = args[index];
 		if (option === "--source") {
-			result.source = parsePlatform(readValue(args, index, option), option);
+			source = parsePlatform(readValue(args, index, option), option);
 			index += 1;
 		} else if (option === "--limit") {
-			result.limit = parsePositiveInteger(
-				readValue(args, index, option),
-				option,
-			);
+			limit = parsePositiveInteger(readValue(args, index, option), option);
 			index += 1;
 		} else {
 			throw new Error(`Unknown argument: ${option}`);
 		}
 	}
 
-	if (!result.source) {
+	if (!source) {
 		throw new Error("list requires --source <claude|codex>");
 	}
-	return result;
+	return { command: "list", source, limit };
 }
 
-function parseNew(args) {
+function parseNew(args: string[]): NewCommand {
 	const target = parsePlatform(args[0], "new target");
-	const result = {
+	const result: NewCommand = {
 		command: "new",
 		target,
 		cwd: null,
@@ -90,16 +101,19 @@ function parseNew(args) {
 	return result;
 }
 
-function parseResume(args, forcedContextLevel = null) {
+function parseResume(
+	args: string[],
+	forcedContextLevel: string | null = null,
+): ResumeCommand {
 	const first = args[0];
 	const hasSessionId = Boolean(first && !first.startsWith("-"));
-	const result = {
+	let contextLevel = forcedContextLevel ?? DEFAULT_CONTEXT_LEVEL;
+	const result: Omit<ResumeCommand, "contextLevel"> = {
 		command: "resume",
-		sessionId: hasSessionId ? first : null,
+		sessionId: hasSessionId && first ? first : null,
 		source: null,
 		target: null,
 		recent: DEFAULT_RECENT_LIMIT,
-		contextLevel: forcedContextLevel ?? DEFAULT_CONTEXT_LEVEL,
 		maxMessages: DEFAULT_MAX_MESSAGES,
 		dryRun: false,
 		firstMessage: null,
@@ -134,7 +148,7 @@ function parseResume(args, forcedContextLevel = null) {
 			);
 			index += 1;
 		} else if (option === "--context-level") {
-			result.contextLevel = readValue(args, index, option).toLowerCase();
+			contextLevel = readValue(args, index, option).toLowerCase();
 			index += 1;
 		} else if (option === "--first-message") {
 			result.firstMessage = readValue(args, index, option);
@@ -151,21 +165,24 @@ function parseResume(args, forcedContextLevel = null) {
 		}
 	}
 
-	if (!CONTEXT_LEVELS.has(result.contextLevel)) {
+	if (!isContextLevel(contextLevel)) {
 		throw new Error("--context-level must be minimal, standard, or deep");
 	}
-	return result;
+	return { ...result, contextLevel };
 }
 
 /**
  * Parses CLI arguments into one validated command shape.
  */
-export function parseArgs(argv) {
+export function parseArgs(argv: string[]): CliCommand {
 	if (argv.length === 0) {
 		return parseResume([]);
 	}
 
 	const [rawCommand, ...rest] = argv;
+	if (!rawCommand) {
+		return parseResume([]);
+	}
 	if (rawCommand === "-h" || rawCommand === "--help" || rawCommand === "help") {
 		return { command: "help" };
 	}
@@ -175,7 +192,7 @@ export function parseArgs(argv) {
 	if (rawCommand === "new") {
 		return parseNew(rest);
 	}
-	if (PLATFORMS.has(rawCommand)) {
+	if (isPlatform(rawCommand)) {
 		return parseNew([rawCommand, ...rest]);
 	}
 	if (rawCommand === "resume") {
@@ -188,7 +205,7 @@ export function parseArgs(argv) {
 	throw new Error(`Unknown command: ${rawCommand}`);
 }
 
-export function getHelpText() {
+export function getHelpText(): string {
 	return `continues
 
 Resume local Claude Code and Codex sessions.

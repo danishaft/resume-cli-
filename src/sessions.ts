@@ -1,16 +1,40 @@
-import fs from "node:fs";
+import fs, { type Dirent } from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
-const SESSION_ROOTS = {
+import type {
+	ConversationMessage,
+	Platform,
+	Session,
+	SessionCandidate,
+	SessionReference,
+} from "./types.js";
+
+type SessionRow = {
+	type?: unknown;
+	role?: unknown;
+	content?: unknown;
+	cwd?: unknown;
+	timestamp?: unknown;
+	message?: {
+		content?: unknown;
+	};
+	payload?: {
+		type?: unknown;
+		message?: unknown;
+		cwd?: unknown;
+	};
+};
+
+const SESSION_ROOTS: Record<Platform, string> = {
 	claude: path.join(os.homedir(), ".claude", "projects"),
 	codex: path.join(os.homedir(), ".codex", "sessions"),
 };
 
-async function* walk(directory) {
-	let entries;
+async function* walk(directory: string): AsyncGenerator<string> {
+	let entries: Dirent[];
 	try {
 		entries = await fsp.readdir(directory, { withFileTypes: true });
 	} catch {
@@ -27,16 +51,23 @@ async function* walk(directory) {
 	}
 }
 
-function parseJson(line) {
+function parseJson(line: string): SessionRow | null {
 	try {
-		return JSON.parse(line);
+		const value: unknown = JSON.parse(line);
+		return value !== null && typeof value === "object"
+			? (value as SessionRow)
+			: null;
 	} catch {
 		return null;
 	}
 }
 
-async function readJsonl(filePath, maxRows, keepTail = false) {
-	const rows = [];
+async function readJsonl(
+	filePath: string,
+	maxRows: number,
+	keepTail = false,
+): Promise<SessionRow[]> {
+	const rows: SessionRow[] = [];
 	const input = fs.createReadStream(filePath, { encoding: "utf8" });
 	const reader = readline.createInterface({ input, crlfDelay: Infinity });
 
@@ -59,7 +90,7 @@ async function readJsonl(filePath, maxRows, keepTail = false) {
 	return rows;
 }
 
-function extractClaudeText(content) {
+function extractClaudeText(content: unknown): string {
 	if (typeof content === "string") {
 		return content;
 	}
@@ -67,22 +98,36 @@ function extractClaudeText(content) {
 		return "";
 	}
 	return content
-		.filter((block) => block?.type === "text" && typeof block.text === "string")
+		.filter(
+			(block): block is { type: "text"; text: string } =>
+				block !== null &&
+				typeof block === "object" &&
+				"type" in block &&
+				block.type === "text" &&
+				"text" in block &&
+				typeof block.text === "string",
+		)
 		.map((block) => block.text)
 		.join("\n")
 		.trim();
 }
 
-function firstLine(value, maxLength = 100) {
-	const line = String(value ?? "")
-		.split(/\r?\n/, 1)[0]
+function firstLine(value: unknown, maxLength = 100): string {
+	const line = (String(value ?? "").split(/\r?\n/, 1)[0] ?? "")
 		.replace(/\s+/g, " ")
 		.trim();
 	return line.length > maxLength ? `${line.slice(0, maxLength)}...` : line;
 }
 
-function toConversation(source, rows) {
-	const messages = [];
+function timestampOf(row: SessionRow): string | null {
+	return typeof row.timestamp === "string" ? row.timestamp : null;
+}
+
+function toConversation(
+	source: Platform,
+	rows: SessionRow[],
+): ConversationMessage[] {
+	const messages: ConversationMessage[] = [];
 	for (const row of rows) {
 		if (source === "claude" && row.message) {
 			if (row.type !== "user" && row.type !== "assistant") {
@@ -93,7 +138,7 @@ function toConversation(source, rows) {
 				messages.push({
 					role: row.type,
 					text,
-					timestamp: row.timestamp ?? null,
+					timestamp: timestampOf(row),
 				});
 			}
 			continue;
@@ -110,7 +155,7 @@ function toConversation(source, rows) {
 				messages.push({
 					role,
 					text: row.payload.message,
-					timestamp: row.timestamp ?? null,
+					timestamp: timestampOf(row),
 				});
 			}
 		} else if (
@@ -122,14 +167,14 @@ function toConversation(source, rows) {
 			messages.push({
 				role: row.role,
 				text: row.content,
-				timestamp: row.timestamp ?? null,
+				timestamp: timestampOf(row),
 			});
 		}
 	}
 	return messages;
 }
 
-function sessionIdFromPath(source, filePath) {
+function sessionIdFromPath(source: Platform, filePath: string): string | null {
 	const baseName = path.basename(filePath, ".jsonl");
 	if (source === "claude") {
 		return /^[0-9a-f-]{36}$/i.test(baseName) ? baseName : null;
@@ -140,8 +185,10 @@ function sessionIdFromPath(source, filePath) {
 	return match?.[1] ?? null;
 }
 
-async function collectSourceSessions(source) {
-	const sessions = [];
+async function collectSourceSessions(
+	source: Platform,
+): Promise<SessionCandidate[]> {
+	const sessions: SessionCandidate[] = [];
 	for await (const filePath of walk(SESSION_ROOTS[source])) {
 		if (!filePath.endsWith(".jsonl")) {
 			continue;
@@ -156,7 +203,9 @@ async function collectSourceSessions(source) {
 	return sessions;
 }
 
-async function readSessionMetadata(session) {
+async function readSessionMetadata(
+	session: SessionCandidate,
+): Promise<Session> {
 	const rows = await readJsonl(session.filePath, 100);
 	let cwd = "";
 	let summary = "";
@@ -197,8 +246,11 @@ async function readSessionMetadata(session) {
 /**
  * Returns recent local sessions, enriched only after modification-time sorting.
  */
-export async function collectRecentSessions(limit, source = null) {
-	const sources = source ? [source] : ["claude", "codex"];
+export async function collectRecentSessions(
+	limit: number,
+	source: Platform | null = null,
+): Promise<Session[]> {
+	const sources: Platform[] = source ? [source] : ["claude", "codex"];
 	const lists = await Promise.all(sources.map(collectSourceSessions));
 	const recent = lists
 		.flat()
@@ -208,9 +260,12 @@ export async function collectRecentSessions(limit, source = null) {
 	return Promise.all(recent.map(readSessionMetadata));
 }
 
-export async function resolveSession(id, source = null) {
-	const sources = source ? [source] : ["claude", "codex"];
-	const matches = [];
+export async function resolveSession(
+	id: string,
+	source: Platform | null = null,
+): Promise<SessionReference | null> {
+	const sources: Platform[] = source ? [source] : ["claude", "codex"];
+	const matches: SessionReference[] = [];
 	for (const candidateSource of sources) {
 		for await (const filePath of walk(SESSION_ROOTS[candidateSource])) {
 			if (
@@ -228,11 +283,16 @@ export async function resolveSession(id, source = null) {
 	return matches[0] ?? null;
 }
 
-export async function inferSessionCwd(session) {
+export async function inferSessionCwd(
+	session: SessionReference,
+): Promise<string> {
 	const rows = await readJsonl(session.filePath, 400, true);
 	for (let index = rows.length - 1; index >= 0; index -= 1) {
-		const cwd =
-			session.source === "claude" ? rows[index].cwd : rows[index].payload?.cwd;
+		const row = rows[index];
+		if (!row) {
+			continue;
+		}
+		const cwd = session.source === "claude" ? row.cwd : row.payload?.cwd;
 		if (typeof cwd === "string" && cwd.trim()) {
 			return cwd;
 		}
@@ -240,12 +300,15 @@ export async function inferSessionCwd(session) {
 	return process.cwd();
 }
 
-export async function readSessionConversation(session, maxMessages) {
+export async function readSessionConversation(
+	session: SessionReference,
+	maxMessages: number,
+): Promise<ConversationMessage[]> {
 	const maxRows = Math.max(maxMessages * 12, 200);
 	const rows = await readJsonl(session.filePath, maxRows, true);
 	return toConversation(session.source, rows).slice(-maxMessages);
 }
 
-export function formatTimestamp(milliseconds) {
+export function formatTimestamp(milliseconds: number): string {
 	return new Date(milliseconds).toISOString().replace("T", " ").slice(0, 19);
 }

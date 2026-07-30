@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseArgs } from "../src/args.mjs";
+import { parseArgs } from "../dist/src/args.js";
 
 test("no arguments opens the resume flow", () => {
 	assert.equal(parseArgs([]).command, "resume");

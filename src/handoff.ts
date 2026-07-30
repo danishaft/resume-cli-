@@ -2,50 +2,62 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { inferSessionCwd, readSessionConversation } from "./sessions.mjs";
+import { inferSessionCwd, readSessionConversation } from "./sessions.js";
+import type {
+	ContextLevel,
+	ConversationMessage,
+	HandoffArtifacts,
+	HandoffPaths,
+	HandoffState,
+	SessionReference,
+} from "./types.js";
 
-function normalizeWhitespace(value) {
+function normalizeWhitespace(value: unknown): string {
 	return String(value ?? "")
 		.replace(/\s+/g, " ")
 		.trim();
 }
 
-function clip(value, maxLength) {
+function clip(value: unknown, maxLength: number): string {
 	const text = String(value ?? "");
 	return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
-function firstLine(value, maxLength = 120) {
+function firstLine(value: unknown, maxLength = 120): string {
 	return clip(
 		normalizeWhitespace(String(value ?? "").split(/\r?\n/, 1)[0]),
 		maxLength,
 	);
 }
 
-function extractPaths(text) {
+function extractPaths(text: string): string[] {
 	const matches =
-		String(text).match(
+		text.match(
 			/(?:\.?\/?[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_.-]+)?/g,
 		) ?? [];
 	return matches.filter((value) => !value.startsWith("http"));
 }
 
-function unique(values, limit) {
+function unique(values: string[], limit: number): string[] {
 	return [...new Set(values)].slice(0, limit);
 }
 
-function extractState(conversation, session, cwd) {
+function extractState(
+	conversation: ConversationMessage[],
+	session: SessionReference,
+	cwd: string,
+): HandoffState {
 	const userMessages = conversation
 		.filter((message) => message.role === "user")
 		.map((message) => message.text);
 	const assistantMessages = conversation
 		.filter((message) => message.role === "assistant")
 		.map((message) => message.text);
-	const decisions = [];
-	const constraints = [];
-	const openQuestions = [];
-	const nextActions = [];
-	const paths = [];
+	const decisions: string[] = [];
+	const constraints: string[] = [];
+	const openQuestions: string[] = [];
+	const nextActions: string[] = [];
+	const paths: string[] = [];
 	let lastError = "";
 
 	for (const message of conversation) {
@@ -96,7 +108,10 @@ function extractState(conversation, session, cwd) {
 	};
 }
 
-function selectSnippets(conversation, contextLevel) {
+function selectSnippets(
+	conversation: ConversationMessage[],
+	contextLevel: ContextLevel,
+): ConversationMessage[] {
 	const count =
 		contextLevel === "minimal"
 			? 4
@@ -106,7 +121,7 @@ function selectSnippets(conversation, contextLevel) {
 	return conversation.slice(-count);
 }
 
-function renderList(lines, heading, items) {
+function renderList(lines: string[], heading: string, items: string[]): void {
 	lines.push(`## ${heading}`, "");
 	if (items.length === 0) {
 		lines.push("_None._", "");
@@ -118,7 +133,12 @@ function renderList(lines, heading, items) {
 	lines.push("");
 }
 
-function renderHandoff(session, cwd, state, snippets) {
+function renderHandoff(
+	session: SessionReference,
+	cwd: string,
+	state: HandoffState,
+	snippets: ConversationMessage[],
+): string {
 	const lines = [
 		"# Session handoff",
 		"",
@@ -149,10 +169,10 @@ function renderHandoff(session, cwd, state, snippets) {
 }
 
 export async function buildHandoffArtifacts(
-	session,
-	maxMessages,
-	contextLevel,
-) {
+	session: SessionReference,
+	maxMessages: number,
+	contextLevel: ContextLevel,
+): Promise<HandoffArtifacts> {
 	const cwd = await inferSessionCwd(session);
 	const conversation = await readSessionConversation(session, maxMessages);
 	const state = extractState(conversation, session, cwd);
@@ -165,11 +185,16 @@ export async function buildHandoffArtifacts(
 	return { cwd, state, handoff, transcript: conversation };
 }
 
-function safeFileToken(value) {
-	return String(value).replace(/[^A-Za-z0-9._-]/g, "_");
+function safeFileToken(value: string): string {
+	return value.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-export async function persistHandoff(session, cwd, artifacts, writeLocal) {
+export async function persistHandoff(
+	session: SessionReference,
+	cwd: string,
+	artifacts: HandoffArtifacts,
+	writeLocal: boolean,
+): Promise<HandoffPaths> {
 	const directory = path.join(os.tmpdir(), "continues-handoffs");
 	await fsp.mkdir(directory, { recursive: true, mode: 0o700 });
 	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");

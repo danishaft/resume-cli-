@@ -1,24 +1,30 @@
 #!/usr/bin/env node
 import process from "node:process";
 
-import { getHelpText, parseArgs } from "./src/args.mjs";
-import { buildHandoffArtifacts, persistHandoff } from "./src/handoff.mjs";
+import { getHelpText, parseArgs } from "./src/args.js";
+import { buildHandoffArtifacts, persistHandoff } from "./src/handoff.js";
 import {
 	buildHandoffPrompt,
 	buildNewCommand,
 	buildResumeCommand,
 	formatCommand,
 	runCommand,
-} from "./src/launch.mjs";
+} from "./src/launch.js";
 import {
 	collectRecentSessions,
 	formatTimestamp,
 	inferSessionCwd,
 	resolveSession,
-} from "./src/sessions.mjs";
-import { selectSession } from "./src/terminal.mjs";
+} from "./src/sessions.js";
+import { selectSession } from "./src/terminal.js";
+import type {
+	LaunchCommand,
+	ResumeCommand,
+	Session,
+	SessionReference,
+} from "./src/types.js";
 
-function printSessions(sessions) {
+function printSessions(sessions: Session[]): void {
 	for (const session of sessions) {
 		const summary = session.summary ? ` - ${session.summary}` : "";
 		process.stdout.write(
@@ -27,7 +33,11 @@ function printSessions(sessions) {
 	}
 }
 
-async function runOrPrint(command, cwd, dryRun) {
+async function runOrPrint(
+	command: LaunchCommand,
+	cwd: string,
+	dryRun: boolean,
+): Promise<void> {
 	if (dryRun) {
 		process.stdout.write(`${formatCommand(command, cwd)}\n`);
 		return;
@@ -35,7 +45,9 @@ async function runOrPrint(command, cwd, dryRun) {
 	await runCommand(command, cwd);
 }
 
-async function selectRequestedSession(options) {
+async function selectRequestedSession(
+	options: ResumeCommand,
+): Promise<SessionReference> {
 	if (options.sessionId) {
 		const session = await resolveSession(options.sessionId, options.source);
 		if (!session) {
@@ -51,7 +63,7 @@ async function selectRequestedSession(options) {
 	return selectSession(sessions);
 }
 
-async function resume(options) {
+async function resume(options: ResumeCommand): Promise<void> {
 	const session = await selectRequestedSession(options);
 	const target = options.target ?? session.source;
 	const inferredCwd = await inferSessionCwd(session);
@@ -87,7 +99,7 @@ async function resume(options) {
 	await runOrPrint(command, cwd, options.dryRun);
 }
 
-async function main(argv) {
+async function main(argv: string[]): Promise<void> {
 	const command = parseArgs(argv);
 	if (command.command === "help") {
 		process.stdout.write(`${getHelpText()}\n`);
@@ -112,7 +124,11 @@ async function main(argv) {
 	await resume(command);
 }
 
-main(process.argv.slice(2)).catch((error) => {
-	process.stderr.write(`continues: ${error.message}\n`);
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+main(process.argv.slice(2)).catch((error: unknown) => {
+	process.stderr.write(`continues: ${errorMessage(error)}\n`);
 	process.exitCode = 1;
 });

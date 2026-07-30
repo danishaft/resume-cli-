@@ -8,7 +8,7 @@
 		}
 	},
 	"files": {
-		"includes": ["**/*.mjs", "!node_modules"]
+		"includes": ["**/*.ts", "**/*.mjs", "!dist", "!node_modules"]
 	},
 	"formatter": {
 		"enabled": true,

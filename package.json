@@ -4,17 +4,19 @@
   "description": "Resume or transfer local Claude Code and Codex sessions",
   "type": "module",
   "bin": {
-    "bridge": "./continues.mjs",
-    "continues": "./continues.mjs"
+    "bridge": "./dist/continues.js",
+    "continues": "./dist/continues.js"
   },
   "scripts": {
-    "start": "node continues.mjs",
-    "list": "node continues.mjs list",
+    "build": "tsc --project tsconfig.json",
+    "start": "npm run build --silent && node dist/continues.js",
+    "list": "npm run build --silent && node dist/continues.js list",
     "lint": "biome check .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "test": "node --test",
-    "check": "npm run lint && npm test"
+    "test": "npm run build --silent && node --test",
+    "check": "npm run lint && npm test",
+    "prepack": "npm run check"
   },
   "keywords": [
     "claude",
@@ -29,8 +31,7 @@
     "node": ">=22"
   },
   "files": [
-    "continues.mjs",
-    "src",
+    "dist",
     "README.md",
     "LICENSE"
   ],
@@ -43,6 +44,8 @@
   },
   "homepage": "https://github.com/danishaft/resume-cli-#readme",
   "devDependencies": {
-    "@biomejs/biome": "^2.2.0"
+    "@biomejs/biome": "^2.2.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
   }
 }
