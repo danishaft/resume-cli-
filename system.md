@@ -96,7 +96,7 @@ Discovery scans:
 
 Metadata reads stop after enough head rows are available. Conversation reads
 retain only a bounded tail. Cross-agent artifacts are stored under
-`$TMPDIR/continues-handoffs` with restrictive Unix permissions.
+`$TMPDIR/continues-handoffs-*` with restrictive Unix permissions.
 
 The CLI does not redact conversation content because reliable generic
 redaction would create false confidence. Transfer is an explicit user action,

@@ -89,8 +89,8 @@ conversation. Same-agent resumes use `claude --resume <id>` or
 `codex resume <id>`.
 
 Cross-agent transfers normalize recent messages, extract working state, and
-write the full artifacts to a mode `0700` temporary directory with mode `0600`
-files. The target receives a bounded handoff prompt, not the source session
+write the full artifacts to a unique mode `0700` temporary directory with mode
+`0600` files. The target receives a bounded handoff prompt, not the source session
 file.
 
 See [system.md](system.md) for component boundaries, execution sequences, and

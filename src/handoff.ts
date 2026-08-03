@@ -195,8 +195,10 @@ export async function persistHandoff(
 	artifacts: HandoffArtifacts,
 	writeLocal: boolean,
 ): Promise<HandoffPaths> {
-	const directory = path.join(os.tmpdir(), "continues-handoffs");
-	await fsp.mkdir(directory, { recursive: true, mode: 0o700 });
+	const directory = await fsp.mkdtemp(
+		path.join(os.tmpdir(), "continues-handoffs-"),
+	);
+	await fsp.chmod(directory, 0o700);
 	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 	const base = `${timestamp}-${safeFileToken(session.source)}-${safeFileToken(session.id)}`;
 	const paths = {
@@ -223,7 +225,10 @@ export async function persistHandoff(
 
 	if (writeLocal) {
 		const localPath = path.join(cwd, ".continues-handoff.md");
-		await fsp.writeFile(localPath, artifacts.handoff, "utf8");
+		await fsp.writeFile(localPath, artifacts.handoff, {
+			encoding: "utf8",
+			mode: 0o600,
+		});
 	}
 	return paths;
 }
